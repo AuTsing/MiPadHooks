@@ -5,7 +5,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
-import android.util.Log
 import android.view.KeyEvent
 import android.widget.Toast
 import de.robv.android.xposed.IXposedHookLoadPackage
@@ -70,8 +69,6 @@ class MainHook : IXposedHookLoadPackage {
                     val event = param.args[1] as KeyEvent
                     val code = event.keyCode
                     val action = event.action
-
-                    Log.d("HOOK", "-----KEY START: $event $code $action")
 
                     if (action == KeyEvent.ACTION_DOWN) {
                         lastDownKey = code
