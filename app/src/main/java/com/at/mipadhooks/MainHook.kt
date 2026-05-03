@@ -18,6 +18,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
 class MainHook : IXposedHookLoadPackage {
 
     private val fnOnMap: Map<Int, Pair<Int, Int>> = mapOf(
+        KeyEvent.KEYCODE_ESCAPE to Pair(KeyEvent.KEYCODE_GRAVE, 41),
         KeyEvent.KEYCODE_1 to Pair(KeyEvent.KEYCODE_F1, 59),
         KeyEvent.KEYCODE_2 to Pair(KeyEvent.KEYCODE_F2, 60),
         KeyEvent.KEYCODE_3 to Pair(KeyEvent.KEYCODE_F3, 61),
@@ -35,9 +36,6 @@ class MainHook : IXposedHookLoadPackage {
         KeyEvent.KEYCODE_DPAD_DOWN to Pair(KeyEvent.KEYCODE_PAGE_DOWN, 109),
         KeyEvent.KEYCODE_DPAD_LEFT to Pair(KeyEvent.KEYCODE_MOVE_HOME, 102),
         KeyEvent.KEYCODE_DPAD_RIGHT to Pair(KeyEvent.KEYCODE_MOVE_END, 107),
-    )
-    private val fnOffMap: Map<Int, Pair<Int, Int>> = mapOf(
-        KeyEvent.KEYCODE_ESCAPE to Pair(KeyEvent.KEYCODE_GRAVE, 41),
     )
     private val fnTrigger: Int = KeyEvent.KEYCODE_ALT_RIGHT
     private var fnOn: Boolean = false
@@ -88,13 +86,6 @@ class MainHook : IXposedHookLoadPackage {
                     if (fnOn && code in fnOnMap.keys) {
                         param.result = -1L
                         val (key, scan) = fnOnMap.getOrDefault(event.keyCode, null) ?: return
-                        handleFnKey(key, scan, event, lpparam)
-                        return
-                    }
-
-                    if (!fnOn && code in fnOffMap.keys) {
-                        param.result = -1L
-                        val (key, scan) = fnOffMap.getOrDefault(event.keyCode, null) ?: return
                         handleFnKey(key, scan, event, lpparam)
                         return
                     }
