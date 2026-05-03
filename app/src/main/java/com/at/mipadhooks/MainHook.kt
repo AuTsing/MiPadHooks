@@ -38,9 +38,9 @@ class MainHook : IXposedHookLoadPackage {
     private val fnOffMap: Map<Int, Pair<Int, Int>> = mapOf(
         KeyEvent.KEYCODE_ESCAPE to Pair(KeyEvent.KEYCODE_GRAVE, 41),
     )
-    private var fnTrigger: Int = KeyEvent.KEYCODE_ALT_RIGHT
-    private var fnTriggerDownRepeatCount: Int = -1
+    private val fnTrigger: Int = KeyEvent.KEYCODE_ALT_RIGHT
     private var fnOn: Boolean = false
+    private var lastDownKey: Int = -1
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName != "android") {
@@ -72,25 +72,29 @@ class MainHook : IXposedHookLoadPackage {
                     val code = event.keyCode
                     val action = event.action
 
-                    Log.d("TAG", "-----KEY START: $event $code $action")
+                    Log.d("HOOK", "-----KEY START: $event $code $action")
+
+                    if (action == KeyEvent.ACTION_DOWN) {
+                        lastDownKey = code
+                    }
 
                     if (code == fnTrigger) {
                         param.result = -1L
-                        handleTrigger(event)
+                        handleToggleFnKey(event)
                         return
                     }
 
                     if (fnOn && code in fnOnMap.keys) {
                         param.result = -1L
                         val (key, scan) = fnOnMap.getOrDefault(event.keyCode, null) ?: return
-                        handleKeyMap(key, scan, event, lpparam)
+                        handleFnKey(key, scan, event, lpparam)
                         return
                     }
 
                     if (!fnOn && code in fnOffMap.keys) {
                         param.result = -1L
                         val (key, scan) = fnOffMap.getOrDefault(event.keyCode, null) ?: return
-                        handleKeyMap(key, scan, event, lpparam)
+                        handleFnKey(key, scan, event, lpparam)
                         return
                     }
                 }
@@ -110,23 +114,18 @@ class MainHook : IXposedHookLoadPackage {
         }
     }
 
-    private fun handleTrigger(event: KeyEvent) {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            fnTriggerDownRepeatCount = event.repeatCount
-        } else if (event.action == KeyEvent.ACTION_UP) {
-            if (fnTriggerDownRepeatCount == 0) {
-                fnOn = !fnOn
-                if (fnOn) {
-                    toast("Fn key ON")
-                } else {
-                    toast("Fn key OFF")
-                }
+    private fun handleToggleFnKey(event: KeyEvent) {
+        if (lastDownKey == KeyEvent.KEYCODE_ALT_RIGHT && event.action == KeyEvent.ACTION_UP) {
+            fnOn = !fnOn
+            if (fnOn) {
+                toast("Fn key ON")
+            } else {
+                toast("Fn key OFF")
             }
-            fnTriggerDownRepeatCount = -1
         }
     }
 
-    private fun handleKeyMap(
+    private fun handleFnKey(
         key: Int,
         scan: Int,
         event: KeyEvent,
@@ -154,7 +153,5 @@ class MainHook : IXposedHookLoadPackage {
             "getInstance",
         )
         XposedHelpers.callMethod(inputManager, "injectInputEvent", newKeyEvent, 0)
-
-        Log.d("TAG", "beforeHookedMethod: invoke injectInputEvent $newKeyEvent")
     }
 }
