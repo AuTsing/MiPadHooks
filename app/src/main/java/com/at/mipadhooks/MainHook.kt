@@ -4,6 +4,7 @@ import android.app.AndroidAppHelper
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.widget.Toast
@@ -97,6 +98,12 @@ class MainHook : IXposedHookLoadPackage {
                         handleFnKey(key, scan, event, lpparam)
                         return
                     }
+
+                    if (event.isCtrlPressed && code == KeyEvent.KEYCODE_SPACE) {
+                        param.result = -1L
+                        handleCtrlShortcut(event)
+                        return
+                    }
                 }
             },
         )
@@ -153,5 +160,28 @@ class MainHook : IXposedHookLoadPackage {
             "getInstance",
         )
         XposedHelpers.callMethod(inputManager, "injectInputEvent", newKeyEvent, 0)
+    }
+
+    private fun handleCtrlShortcut(event: KeyEvent) {
+        if (lastDownKey == KeyEvent.KEYCODE_SPACE && event.action == KeyEvent.ACTION_UP) {
+            val contentResolver = AndroidAppHelper.currentApplication().contentResolver
+            val enabledInputMethods = Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.ENABLED_INPUT_METHODS,
+            ).split(":")
+            val defaultInputMethod = Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.DEFAULT_INPUT_METHOD,
+            )
+            val nextInputMethodIndex = enabledInputMethods.indexOf(defaultInputMethod) + 1
+            val nextInputMethod = enabledInputMethods.getOrNull(nextInputMethodIndex)
+                ?: enabledInputMethods[0]
+            Settings.Secure.putString(
+                contentResolver,
+                Settings.Secure.DEFAULT_INPUT_METHOD,
+                nextInputMethod,
+            )
+            toast("Input method to: $nextInputMethod")
+        }
     }
 }
