@@ -2,7 +2,6 @@ package com.at.mipadhooks
 
 import android.app.AndroidAppHelper
 import android.os.Handler
-import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
 import android.view.KeyEvent
@@ -10,8 +9,10 @@ import android.widget.Toast
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers
-import de.robv.android.xposed.XposedHelpers.findAndHookMethod
+import de.robv.android.xposed.XposedBridge.hookMethod
+import de.robv.android.xposed.XposedHelpers.callMethod
+import de.robv.android.xposed.XposedHelpers.callStaticMethod
+import de.robv.android.xposed.XposedHelpers.findClass
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 
 class MainHook : IXposedHookLoadPackage {
@@ -45,56 +46,73 @@ class MainHook : IXposedHookLoadPackage {
             return
         }
 
-        findAndHookMethod(
-            "com.android.server.input.config.InputCommonConfig",
-            lpparam.classLoader,
-            "setPadMode",
-            Boolean::class.java,
-            object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    param.args[0] = false
-                }
-            },
-        )
+        findClass("com.android.server.input.config.InputCommonConfig", lpparam.classLoader)
+            .declaredMethods
+            .first { it.name == "setPadMode" }
+            .also { method ->
+                hookMethod(
+                    method,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            param.args[0] = false
+                        }
+                    },
+                )
+            }
 
-        findAndHookMethod(
-            "com.android.server.policy.PhoneWindowManager",
-            lpparam.classLoader,
-            "interceptKeyBeforeDispatching",
-            IBinder::class.java,
-            KeyEvent::class.java,
-            Int::class.java,
-            object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    val event = param.args[1] as KeyEvent
-                    val code = event.keyCode
-                    val action = event.action
+        findClass("com.android.server.SystemServerImpl", lpparam.classLoader)
+            .declaredMethods
+            .first { it.name == "addMagicPointerManagerService" }
+            .also { method ->
+                hookMethod(
+                    method,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            param.result = null
+                        }
+                    },
+                )
+            }
 
-                    if (action == KeyEvent.ACTION_DOWN) {
-                        lastDownKey = code
-                    }
+        findClass("com.android.server.policy.PhoneWindowManager", lpparam.classLoader)
+            .declaredMethods
+            .first { it.name == "interceptKeyBeforeDispatching" }
+            .also { method ->
+                hookMethod(
+                    method,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val event = param.args[1] as KeyEvent
+                            val code = event.keyCode
+                            val action = event.action
 
-                    if (code == fnTrigger) {
-                        param.result = -1L
-                        handleToggleFnKey(event)
-                        return
-                    }
+                            if (action == KeyEvent.ACTION_DOWN) {
+                                lastDownKey = code
+                            }
 
-                    if (fnOn && code in fnOnMap.keys) {
-                        param.result = -1L
-                        val (key, scan) = fnOnMap.getOrDefault(event.keyCode, null) ?: return
-                        handleFnKey(key, scan, event, lpparam)
-                        return
-                    }
+                            if (code == fnTrigger) {
+                                param.result = -1L
+                                handleToggleFnKey(event)
+                                return
+                            }
 
-                    if (event.isCtrlPressed && code == KeyEvent.KEYCODE_SPACE) {
-                        param.result = -1L
-                        handleCtrlShortcut(event)
-                        return
-                    }
-                }
-            },
-        )
+                            if (fnOn && code in fnOnMap.keys) {
+                                param.result = -1L
+                                val (key, scan) = fnOnMap.getOrDefault(event.keyCode, null)
+                                    ?: return
+                                handleFnKey(key, scan, event, lpparam)
+                                return
+                            }
+
+                            if (event.isCtrlPressed && code == KeyEvent.KEYCODE_SPACE) {
+                                param.result = -1L
+                                handleCtrlShortcut(event)
+                                return
+                            }
+                        }
+                    },
+                )
+            }
 
         XposedBridge.log("Hooked ${lpparam.packageName} success.")
     }
@@ -139,15 +157,15 @@ class MainHook : IXposedHookLoadPackage {
             event.source,
         )
 
-        val inputManagerClass = XposedHelpers.findClass(
+        val inputManagerClass = findClass(
             "android.hardware.input.InputManager",
             lpparam.classLoader,
         )
-        val inputManager = XposedHelpers.callStaticMethod(
+        val inputManager = callStaticMethod(
             inputManagerClass,
             "getInstance",
         )
-        XposedHelpers.callMethod(inputManager, "injectInputEvent", newKeyEvent, 0)
+        callMethod(inputManager, "injectInputEvent", newKeyEvent, 0)
     }
 
     private fun handleCtrlShortcut(event: KeyEvent) {
