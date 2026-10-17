@@ -1,9 +1,9 @@
 package com.at.mipadhooks
 
 import android.app.AndroidAppHelper
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.view.KeyEvent
 import android.widget.Toast
 import de.robv.android.xposed.IXposedHookLoadPackage
@@ -144,22 +144,16 @@ class MainHook : IXposedHookLoadPackage {
 
     private fun handleToggleIme(event: KeyEvent) {
         if (event.action == KeyEvent.ACTION_UP) {
-            val cr = AndroidAppHelper.currentApplication().contentResolver
-            val imes = Settings.Secure.getString(
-                cr,
-                Settings.Secure.ENABLED_INPUT_METHODS,
-            ).split(":")
-            val currentIme = Settings.Secure.getString(
-                cr,
-                Settings.Secure.DEFAULT_INPUT_METHOD,
-            )
-            val nextIme = imes.getOrNull(imes.indexOf(currentIme) + 1) ?: imes[0]
-            Settings.Secure.putString(
-                cr,
-                Settings.Secure.DEFAULT_INPUT_METHOD,
-                nextIme,
-            )
-            toast("IME: $nextIme")
+            runCatching {
+                val context = AndroidAppHelper.currentApplication()
+                val intent = context.packageManager
+                    .getLaunchIntentForPackage("com.autsing.imeswitcher")
+                    ?: throw Exception("应用未安装")
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            }.onFailure {
+                toast(it.message ?: it.stackTraceToString())
+            }
         }
     }
 
