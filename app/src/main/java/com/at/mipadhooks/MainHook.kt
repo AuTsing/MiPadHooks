@@ -38,8 +38,9 @@ class MainHook : IXposedHookLoadPackage {
         KeyEvent.KEYCODE_DPAD_RIGHT to Pair(KeyEvent.KEYCODE_MOVE_END, 107),
     )
     private val fnTrigger: Int = KeyEvent.KEYCODE_ALT_RIGHT
+    private val imeTrigger: Int = KeyEvent.KEYCODE_CTRL_RIGHT
     private var fnOn: Boolean = false
-    private var lastDownKey: Int = -1
+    private var fnDowns: MutableSet<Int> = mutableSetOf()
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName != "android") {
@@ -86,28 +87,38 @@ class MainHook : IXposedHookLoadPackage {
                             val code = event.keyCode
                             val action = event.action
 
-                            if (action == KeyEvent.ACTION_DOWN) {
-                                lastDownKey = code
-                            }
-
                             if (code == fnTrigger) {
                                 param.result = -1L
-                                handleToggleFnKey(event)
+                                handleToggleFn(event)
                                 return
                             }
 
-                            if (fnOn && code in fnOnMap.keys) {
+                            if (code == imeTrigger) {
                                 param.result = -1L
-                                val (key, scan) = fnOnMap.getOrDefault(event.keyCode, null)
-                                    ?: return
-                                handleFnKey(key, scan, event, lpparam)
+                                handleToggleIme(event)
                                 return
                             }
 
-                            if (event.isCtrlPressed && code == KeyEvent.KEYCODE_SPACE) {
-                                param.result = -1L
-                                handleCtrlShortcut(event)
-                                return
+                            if (code in fnOnMap.keys) {
+                                if (fnOn && action == KeyEvent.ACTION_DOWN) {
+                                    param.result = -1L
+                                    fnDowns.add(code)
+                                    val (key, scan) = fnOnMap[code] ?: return
+                                    handleFnKey(key, scan, event, lpparam)
+                                    return
+                                } else if (fnOn && action == KeyEvent.ACTION_UP) {
+                                    param.result = -1L
+                                    fnDowns.remove(code)
+                                    val (key, scan) = fnOnMap[code] ?: return
+                                    handleFnKey(key, scan, event, lpparam)
+                                    return
+                                } else if (!fnOn && action == KeyEvent.ACTION_UP && code in fnDowns) {
+                                    param.result = -1L
+                                    fnDowns.remove(code)
+                                    val (key, scan) = fnOnMap[code] ?: return
+                                    handleFnKey(key, scan, event, lpparam)
+                                    return
+                                }
                             }
                         }
                     },
@@ -127,14 +138,28 @@ class MainHook : IXposedHookLoadPackage {
         }
     }
 
-    private fun handleToggleFnKey(event: KeyEvent) {
-        if (lastDownKey == KeyEvent.KEYCODE_ALT_RIGHT && event.action == KeyEvent.ACTION_UP) {
-            fnOn = !fnOn
-            if (fnOn) {
-                toast("Fn key ON")
-            } else {
-                toast("Fn key OFF")
-            }
+    private fun handleToggleFn(event: KeyEvent) {
+        fnOn = event.action == KeyEvent.ACTION_DOWN
+    }
+
+    private fun handleToggleIme(event: KeyEvent) {
+        if (event.action == KeyEvent.ACTION_UP) {
+            val cr = AndroidAppHelper.currentApplication().contentResolver
+            val imes = Settings.Secure.getString(
+                cr,
+                Settings.Secure.ENABLED_INPUT_METHODS,
+            ).split(":")
+            val currentIme = Settings.Secure.getString(
+                cr,
+                Settings.Secure.DEFAULT_INPUT_METHOD,
+            )
+            val nextIme = imes.getOrNull(imes.indexOf(currentIme) + 1) ?: imes[0]
+            Settings.Secure.putString(
+                cr,
+                Settings.Secure.DEFAULT_INPUT_METHOD,
+                nextIme,
+            )
+            toast("IME: $nextIme")
         }
     }
 
@@ -150,7 +175,7 @@ class MainHook : IXposedHookLoadPackage {
             event.action,
             key,
             event.repeatCount,
-            event.metaState,
+            0,
             event.deviceId,
             scan,
             event.flags,
@@ -166,28 +191,5 @@ class MainHook : IXposedHookLoadPackage {
             "getInstance",
         )
         callMethod(inputManager, "injectInputEvent", newKeyEvent, 0)
-    }
-
-    private fun handleCtrlShortcut(event: KeyEvent) {
-        if (lastDownKey == KeyEvent.KEYCODE_SPACE && event.action == KeyEvent.ACTION_UP) {
-            val contentResolver = AndroidAppHelper.currentApplication().contentResolver
-            val enabledInputMethods = Settings.Secure.getString(
-                contentResolver,
-                Settings.Secure.ENABLED_INPUT_METHODS,
-            ).split(":")
-            val defaultInputMethod = Settings.Secure.getString(
-                contentResolver,
-                Settings.Secure.DEFAULT_INPUT_METHOD,
-            )
-            val nextInputMethodIndex = enabledInputMethods.indexOf(defaultInputMethod) + 1
-            val nextInputMethod = enabledInputMethods.getOrNull(nextInputMethodIndex)
-                ?: enabledInputMethods[0]
-            Settings.Secure.putString(
-                contentResolver,
-                Settings.Secure.DEFAULT_INPUT_METHOD,
-                nextInputMethod,
-            )
-            toast("Input method to: $nextInputMethod")
-        }
     }
 }

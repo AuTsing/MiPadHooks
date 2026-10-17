@@ -36,6 +36,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    implementation("com.github.topjohnwu.libsu:core:6.0.0")
 //    implementation("com.github.kyuubiran:EzXHelper:2.2.1")
     compileOnly("de.robv.android.xposed:api:82")
 }
